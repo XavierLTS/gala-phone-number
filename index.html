@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>春晚演职人员通讯录</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 231, 235, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen pb-12">
+
+<div id="app" class="max-w-4xl mx-auto px-4 pt-8">
+    <!-- Header -->
+    <header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-slate-800 flex items-center gap-2">
+                <i data-lucide="users" class="text-red-500"></i>
+                春晚演职人员通讯录
+            </h1>
+            <p class="text-slate-500 mt-1" id="stats-summary">正在加载数据...</p>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="exportData()" class="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border border-slate-200 text-sm font-medium hover:bg-slate-50 transition shadow-sm">
+                <i data-lucide="download" class="w-4 h-4"></i> 导出名单
+            </button>
+        </div>
+    </header>
+
+    <!-- Search & Filter Area -->
+    <div class="glass-card p-4 rounded-2xl shadow-sm mb-6 flex flex-col md:flex-row gap-4">
+        <div class="relative flex-1">
+            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400"></i>
+            <input 
+                type="text" 
+                id="search-input" 
+                placeholder="搜索姓名、节目或电话..." 
+                class="w-full pl-10 pr-4 py-3 bg-slate-100 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition"
+                oninput="handleSearch()"
+            >
+        </div>
+        <select 
+            id="program-filter" 
+            class="bg-slate-100 border-transparent rounded-xl px-4 py-3 outline-none focus:bg-white focus:ring-2 focus:ring-red-500 transition cursor-pointer"
+            onchange="handleFilter()"
+        >
+            <option value="">所有节目</option>
+        </select>
+    </div>
+
+    <!-- Contact List -->
+    <div id="contact-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Cards will be injected here -->
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 text-slate-400">
+        <i data-lucide="user-x" class="w-16 h-16 mb-4"></i>
+        <p class="text-lg">没有找到匹配的人员</p>
+    </div>
+</div>
+
+<script>
+    // 数据源 (基于上传的片段转换)
+    const rawData = [
+        { "姓名": "孙可盈", "电话": "7344696274", "节目": "钢琴" },
+        { "姓名": "冯敏", "电话": "7443726699", "节目": "兰亭序" },
+        { "姓名": "张倚晗", "电话": "7547201264", "节目": "琵琶" },
+        { "姓名": "赵靖希", "电话": "7529796476", "节目": "ACT合唱团" },
+        { "姓名": "杨颜蔚", "电话": "7999905375", "节目": "ACT合唱团" },
+        { "姓名": "江敏", "电话": "7486353549", "节目": "ACT合唱团" },
+        { "姓名": "张琎", "电话": "7344126452", "节目": "ACT合唱团" },
+        { "姓名": "郭佳欣", "电话": "7352199163", "节目": "ACT合唱团" },
+        { "姓名": "潘文莉", "电话": "7421802061", "节目": "ACT合唱团" },
+        { "姓名": "张相和", "电话": "7947065705", "节目": "ACT合唱团" },
+        { "姓名": "何辰雨", "电话": "7352202026", "节目": "ACT合唱团" },
+        { "姓名": "袁艺璇", "电话": "7522252174", "节目": "ACT合唱团、独唱" },
+        { "姓名": "高梽伟", "电话": "7928592222", "节目": "ACT合唱团、古琴" },
+        { "姓名": "孙好", "电话": "7352189258", "节目": "ACT合唱团" },
+        { "姓名": "赵梦瑶", "电话": "7477030070", "节目": "ACT合唱团" },
+        { "姓名": "于嘉诚", "电话": "7879939788", "二胡": "二胡", "节目": "二胡" },
+        { "姓名": "张瀚之", "电话": "7405322956", "节目": "小提琴" },
+        { "姓名": "张黎钧", "电话": "7827070687", "节目": "古筝" },
+        { "姓名": "朱芷玥", "电话": "7593856473", "节目": "大提琴" },
+        { "姓名": "朱奕", "电话": "7342721866", "节目": "ACT合唱团" }
+    ];
+
+    let currentData = [...rawData];
+
+    // 初始化页面
+    function init() {
+        lucide.createIcons();
+        populateFilters();
+        renderList();
+    }
+
+    // 填充节目筛选器
+    function populateFilters() {
+        const programSelect = document.getElementById('program-filter');
+        const programs = new Set();
+        rawData.forEach(item => {
+            // 处理包含多个节目的人员
+            const splitProgs = item.节目.split(/[、,，]/);
+            splitProgs.forEach(p => programs.add(p.trim()));
+        });
+
+        Array.from(programs).sort().forEach(prog => {
+            const opt = document.createElement('option');
+            opt.value = prog;
+            opt.textContent = prog;
+            programSelect.appendChild(opt);
+        });
+    }
+
+    // 搜索逻辑
+    function handleSearch() {
+        applyFilters();
+    }
+
+    // 筛选逻辑
+    function handleFilter() {
+        applyFilters();
+    }
+
+    function applyFilters() {
+        const searchTerm = document.getElementById('search-input').value.toLowerCase();
+        const programTerm = document.getElementById('program-filter').value;
+
+        currentData = rawData.filter(item => {
+            const matchesSearch = 
+                item.姓名.toLowerCase().includes(searchTerm) || 
+                item.电话.includes(searchTerm) || 
+                item.节目.toLowerCase().includes(searchTerm);
+            
+            const matchesProgram = programTerm === "" || item.节目.includes(programTerm);
+
+            return matchesSearch && matchesProgram;
+        });
+
+        renderList();
+    }
+
+    // 渲染列表
+    function renderList() {
+        const grid = document.getElementById('contact-grid');
+        const emptyState = document.getElementById('empty-state');
+        const stats = document.getElementById('stats-summary');
+        
+        grid.innerHTML = '';
+        
+        if (currentData.length === 0) {
+            emptyState.classList.remove('hidden');
+        } else {
+            emptyState.classList.add('hidden');
+            currentData.forEach(person => {
+                const card = document.createElement('div');
+                card.className = 'glass-card p-5 rounded-2xl flex items-center justify-between hover:shadow-md transition group border-l-4 border-l-red-500';
+                card.innerHTML = `
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="font-bold text-lg text-slate-800">${person.姓名}</span>
+                            <span class="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full font-medium">
+                                ${person.节目}
+                            </span>
+                        </div>
+                        <div class="flex items-center text-slate-500 text-sm gap-4">
+                            <span class="flex items-center gap-1">
+                                <i data-lucide="phone" class="w-3.5 h-3.5"></i>
+                                ${person.电话}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <a href="tel:${person.电话}" class="p-2.5 bg-slate-100 text-slate-600 rounded-full hover:bg-red-500 hover:text-white transition shadow-sm">
+                            <i data-lucide="phone-call" class="w-5 h-5"></i>
+                        </a>
+                        <button onclick="copyPhone('${person.电话}')" class="p-2.5 bg-slate-100 text-slate-600 rounded-full hover:bg-slate-200 transition shadow-sm">
+                            <i data-lucide="copy" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        stats.textContent = `共计 ${currentData.length} 位演职人员`;
+        lucide.createIcons();
+    }
+
+    // 功能函数：复制电话
+    function copyPhone(phone) {
+        const el = document.createElement('textarea');
+        el.value = phone;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg z-50 text-sm font-medium animate-bounce';
+        toast.textContent = '电话号码已复制到剪贴板';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2000);
+    }
+
+    // 简单导出
+    function exportData() {
+        let csvContent = "姓名,电话,节目\n";
+        currentData.forEach(row => {
+            csvContent += `${row.姓名},${row.电话},${row.节目}\n`;
+        });
+        const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "演职人员联系名单.csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    window.onload = init;
+</script>
+</body>
+</html>
